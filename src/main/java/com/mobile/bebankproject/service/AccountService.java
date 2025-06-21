@@ -5,6 +5,7 @@ import com.mobile.bebankproject.dto.AccountResponse;
 import com.mobile.bebankproject.dto.FundTransferPreview;
 import com.mobile.bebankproject.dto.UpdateProfileRequest;
 import com.mobile.bebankproject.model.Account;
+import com.mobile.bebankproject.model.Bill;
 
 import java.util.List;
 
@@ -59,4 +60,5 @@ public interface AccountService {
     void requestFirebaseOtp(String fromAccountNumber, String toAccountNumber, double amount, String description);
     String findAccountNameByNumber(String accountNumber);
 
+    boolean paymentBill(Bill bill, Integer userId, String pin);
 }

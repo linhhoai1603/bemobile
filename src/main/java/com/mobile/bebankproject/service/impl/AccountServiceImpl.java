@@ -50,6 +50,8 @@ public class AccountServiceImpl implements AccountService {
 
     private static final int OTP_LENGTH = 6;
     private static final long OTP_VALID_DURATION = 5; // minutes
+    @Autowired
+    private TransactionRepository transactionRepository;
 
     @Override
     public AccountResponse login(String phone, String password) {
@@ -106,15 +108,15 @@ public class AccountServiceImpl implements AccountService {
         SimpleMailMessage message = new SimpleMailMessage();
         message.setTo(email);
         message.setSubject("Password Reset OTP");
-        message.setText("Your OTP for password reset is: " + otp + 
-                       "\nThis OTP is valid for " + OTP_VALID_DURATION + " minutes.");
+        message.setText("Your OTP for password reset is: " + otp +
+                "\nThis OTP is valid for " + OTP_VALID_DURATION + " minutes.");
         mailSender.send(message);
     }
 
     @Override
     public boolean checkOTPToChangePassword(String OTP) {
         accountRepository.findByOTP(OTP)
-            .orElseThrow(() -> new RuntimeException("Invalid OTP"));
+                .orElseThrow(() -> new RuntimeException("Invalid OTP"));
         return true;
     }
 
@@ -132,7 +134,7 @@ public class AccountServiceImpl implements AccountService {
         account.setPassword(passwordEncoder.encode(pass1));
         account.setOTP(null);
         accountRepository.save(account);
-        
+
         return true;
     }
 
@@ -282,11 +284,11 @@ public class AccountServiceImpl implements AccountService {
     public boolean validateAccountAndPassword(String accountNumber, String currentPass) {
         Account account = accountRepository.findByAccountNumber(accountNumber)
                 .orElseThrow(() -> new RuntimeException("Account not found"));
-        
+
         if (account.getAccountStatus() != Account.Status.ACTIVE) {
             throw new RuntimeException("Account is not active");
         }
-        
+
         return passwordEncoder.matches(currentPass, account.getPassword());
     }
 
@@ -356,8 +358,8 @@ public class AccountServiceImpl implements AccountService {
         }
 
         // Check if account has any pending transactions
-        if (account.getListTransactions() != null && 
-            account.getListTransactions().stream().anyMatch(t -> t.getStatus() == TransactionStatus.PENDING)) {
+        if (account.getListTransactions() != null &&
+                account.getListTransactions().stream().anyMatch(t -> t.getStatus() == TransactionStatus.PENDING)) {
             throw new RuntimeException("Please wait for all pending transactions to complete");
         }
 
@@ -449,14 +451,22 @@ public class AccountServiceImpl implements AccountService {
         toAccount.setBalance(toAccount.getBalance() + amount);
         accountRepository.save(fromAccount);
         accountRepository.save(toAccount);
+
+        // Create and save transaction
         TransactionFundTransfer transaction = new TransactionFundTransfer();
         transaction.setFromAccount(fromAccountNumber);
         transaction.setToAccount(toAccount);
         transaction.setTransactionDate(LocalDateTime.now());
-        transaction.setDescription(description);
         transaction.setAmount(amount);
         transaction.setStatus(TransactionStatus.SUCCESS);
         transaction.setAccount(fromAccount);
+
+        // Set description with more details
+        String transactionDescription = String.format("Chuyển tiền đến %s - %s",
+                toAccount.getAccountNumber(),
+                description != null && !description.isEmpty() ? description : "Chuyển tiền");
+        transaction.setDescription(transactionDescription);
+
         transactionFundTransferRepository.save(transaction);
         return true;
     }
@@ -619,5 +629,25 @@ public class AccountServiceImpl implements AccountService {
         return accountRepository.findByAccountNumber(accountNumber)
                 .map(Account::getAccountName)
                 .orElse(null);
+    }
+
+    @Override
+    @Transactional
+    public boolean paymentBill(Bill bill, Integer userId, String pin) {
+        // check thông tin
+        Account account = accountRepository.findByUserId(userId);
+        if(account == null) {
+            throw new RuntimeException("User not found");
+        }
+        if(!account.getPIN().equals(pin)) {
+            throw new RuntimeException("Pin does not match");
+        }
+        if(account.getBalance() < bill.getTotalAmount()) {
+            throw new RuntimeException("Insufficient balance");
+        }
+        // trừ tiền tài khoản
+        account.setBalance(account.getBalance() - bill.getTotalAmount());
+        accountRepository.save(account);
+        return true;
     }
 } 
